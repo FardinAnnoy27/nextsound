@@ -136,7 +136,36 @@ npm run preview
 - **Testing:** Vitest, Playwright
 
 <br>
+Project Structure
 
+nextsound/
+├── server/
+│   └── index.js              # Express proxy: auth, CORS, Spotify forwarding
+├── public/
+│   └── mockServiceWorker.js  # MSW service worker (optional dev mocking)
+├── src/
+│   ├── main.tsx              # App bootstrap & provider tree
+│   ├── App.tsx               # Layout, routes, global shortcuts
+│   ├── pages/
+│   │   ├── Home/             # Hero + music sections
+│   │   └── NotFound/
+│   ├── common/               # Layout: Header, Footer, Sidebar, Section, Loader, etc.
+│   ├── components/ui/        # Player, TrackCard, CommandPalette, shadcn primitives
+│   ├── context/              # Theme, Global UI, AudioPlayer providers
+│   ├── hooks/                # useAudioPlayer, useCommandPalette, useLoading, etc.
+│   ├── services/
+│   │   ├── MusicAPI.ts       # Unified data facade (mock vs live routing)
+│   │   ├── SpotifyAPI.ts     # RTK Query Spotify endpoints + retry/cache
+│   │   └── MCPAudioService.ts# Preview URL fetching for audio player
+│   ├── store/index.ts        # Redux store configuration
+│   ├── data/mockMusicData.ts # Demo mode curated tracks
+│   ├── utils/                # config, helpers, offline cache, search algorithm
+│   ├── constants/            # Nav links, homepage sections
+│   ├── mocks/                # MSW handlers (optional)
+│   └── types.d.ts            # ITrack, Spotify API types
+├── .env.example              # Environment variable template
+├── vite.config.ts            # Vite + @ path alias
+└── package.json
 ## Troubleshooting
 
 ### Common Issues
