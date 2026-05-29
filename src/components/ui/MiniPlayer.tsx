@@ -10,7 +10,7 @@ import {
   FiShuffle,
   FiRepeat,
   FiHeart,
-  FiMoreHorizontal,
+  FiList,
   FiMinimize2,
   FiMaximize2
 } from 'react-icons/fi';
@@ -35,6 +35,8 @@ interface MiniPlayerProps {
   onClose?: () => void;
   isMinimized?: boolean;
   onToggleMinimize?: () => void;
+  onOpenQueue?: () => void;
+  queueCount?: number;
   className?: string;
 }
 
@@ -55,6 +57,8 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
   onToggleFavorite,
   isMinimized = false,
   onToggleMinimize,
+  onOpenQueue,
+  queueCount = 0,
   className
 }) => {
   const [isMuted, setIsMuted] = useState(false);
@@ -322,13 +326,20 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
             )}
           </div>
 
-          {/* More options */}
+          {/* Queue */}
           <Button
+            onClick={onOpenQueue}
             variant="ghost"
             size="icon"
-            className="flex items-center justify-center w-8 h-8 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors duration-200"
+            className="relative flex items-center justify-center w-8 h-8 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors duration-200"
+            aria-label="Open queue"
           >
-            <FiMoreHorizontal className="w-4 h-4" />
+            <FiList className="w-4 h-4" />
+            {queueCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-accent-orange text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {queueCount > 99 ? '99+' : queueCount}
+              </span>
+            )}
           </Button>
 
           {/* Minimize */}

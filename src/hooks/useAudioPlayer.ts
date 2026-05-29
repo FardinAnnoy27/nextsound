@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ITrack } from '@/types';
-import { mcpAudioService, PreviewTrack as _PreviewTrack } from '@/services/MCPAudioService';
+import { mcpAudioService } from '@/services/MCPAudioService';
 
 interface AudioPlayerState {
   currentTrack: ITrack | null;
@@ -11,6 +11,15 @@ interface AudioPlayerState {
   repeatMode: 'off' | 'one' | 'all';
   isMinimized: boolean;
 }
+
+const shuffleArray = <T,>(arr: T[]): T[] => {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+};
 
 export const useAudioPlayer = () => {
   const [state, setState] = useState<AudioPlayerState>({
@@ -23,51 +32,106 @@ export const useAudioPlayer = () => {
     isMinimized: false,
   });
 
+  const [upNext, setUpNext] = useState<ITrack[]>([]);
+  const [isQueueOpen, setIsQueueOpen] = useState(false);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressInterval = useRef<NodeJS.Timeout | null>(null);
   const simulationInterval = useRef<NodeJS.Timeout | null>(null);
+  const upNextRef = useRef<ITrack[]>([]);
+  const playHistoryRef = useRef<ITrack[]>([]);
+  const stateRef = useRef(state);
+  const playTrackRef = useRef<(track: ITrack, options?: { skipHistory?: boolean }) => Promise<void>>(
+    async () => {}
+  );
+  const advanceToNextRef = useRef<() => void>(() => {});
+
+  stateRef.current = state;
+
+  const syncUpNext = useCallback((tracks: ITrack[]) => {
+    upNextRef.current = tracks;
+    setUpNext(tracks);
+  }, []);
+
+  const clearSimulation = useCallback(() => {
+    if (simulationInterval.current) {
+      clearInterval(simulationInterval.current);
+      simulationInterval.current = null;
+    }
+  }, []);
+
+  const startSimulation = useCallback(
+    (onComplete: () => void) => {
+      let simulatedProgress = 0;
+      simulationInterval.current = setInterval(() => {
+        simulatedProgress += 1;
+        setState((prev) => ({ ...prev, progress: simulatedProgress }));
+
+        if (simulatedProgress >= 100) {
+          clearSimulation();
+          onComplete();
+        }
+      }, 250);
+    },
+    [clearSimulation]
+  );
+
+  const advanceToNext = useCallback(() => {
+    const current = stateRef.current;
+    const queue = upNextRef.current;
+
+    if (current.repeatMode === 'one' && current.currentTrack) {
+      playTrackRef.current(current.currentTrack, { skipHistory: true });
+      return;
+    }
+
+    if (queue.length > 0) {
+      const [next, ...rest] = queue;
+      syncUpNext(rest);
+      if (current.currentTrack) {
+        playHistoryRef.current = [...playHistoryRef.current, current.currentTrack].slice(-50);
+      }
+      playTrackRef.current(next, { skipHistory: true });
+      return;
+    }
+
+    if (current.repeatMode === 'all' && current.currentTrack) {
+      playTrackRef.current(current.currentTrack, { skipHistory: true });
+      return;
+    }
+
+    setState((prev) => ({ ...prev, isPlaying: false, progress: 0 }));
+  }, [syncUpNext]);
+
+  advanceToNextRef.current = advanceToNext;
 
   // Initialize audio element
   useEffect(() => {
     audioRef.current = new Audio();
-    
+
     const audio = audioRef.current;
-    
+
     const handleEnded = () => {
-      setState(prev => ({ ...prev, isPlaying: false, progress: 0 }));
+      advanceToNextRef.current();
     };
-    
-    const handleLoadStart = () => {
-      console.log('Audio loading started');
-    };
-    
-    const handleCanPlay = () => {
-      console.log('Audio can start playing');
-    };
-    
+
     const handleError = (e: Event) => {
       console.error('Audio error:', e);
-      setState(prev => ({ ...prev, isPlaying: false }));
+      setState((prev) => ({ ...prev, isPlaying: false }));
     };
 
     audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('loadstart', handleLoadStart);
-    audio.addEventListener('canplay', handleCanPlay);
     audio.addEventListener('error', handleError);
 
     return () => {
       audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('loadstart', handleLoadStart);
-      audio.removeEventListener('canplay', handleCanPlay);
       audio.removeEventListener('error', handleError);
       if (progressInterval.current) {
         clearInterval(progressInterval.current);
       }
-      if (simulationInterval.current) {
-        clearInterval(simulationInterval.current);
-      }
+      clearSimulation();
     };
-  }, []);
+  }, [clearSimulation]);
 
   // Update progress
   useEffect(() => {
@@ -76,18 +140,16 @@ export const useAudioPlayer = () => {
         const audio = audioRef.current;
         if (audio && audio.duration) {
           const currentProgress = (audio.currentTime / audio.duration) * 100;
-          setState(prev => ({ ...prev, progress: currentProgress }));
+          setState((prev) => ({ ...prev, progress: currentProgress }));
         }
-      }, 250); // Optimized for smoother UI - 4 updates per second
+      }, 250);
     } else {
       if (progressInterval.current) {
         clearInterval(progressInterval.current);
         progressInterval.current = null;
       }
-      // Also clear simulation interval when not playing
-      if (simulationInterval.current) {
-        clearInterval(simulationInterval.current);
-        simulationInterval.current = null;
+      if (!state.isPlaying) {
+        clearSimulation();
       }
     }
 
@@ -95,243 +157,227 @@ export const useAudioPlayer = () => {
       if (progressInterval.current) {
         clearInterval(progressInterval.current);
       }
-      if (simulationInterval.current) {
-        clearInterval(simulationInterval.current);
-      }
     };
-  }, [state.isPlaying]);
+  }, [state.isPlaying, clearSimulation]);
 
-  const playTrack = useCallback(async (track: ITrack) => {
-    console.log('🎵 Playing track:', track.title || track.name);
+  const playTrack = useCallback(
+    async (track: ITrack, options?: { skipHistory?: boolean }) => {
+      clearSimulation();
 
-    // Clear any existing simulation interval
-    if (simulationInterval.current) {
-      clearInterval(simulationInterval.current);
-      simulationInterval.current = null;
+      const current = stateRef.current;
+
+      if (current.currentTrack?.id === track.id) {
+        setState((prev) => ({ ...prev, isPlaying: !prev.isPlaying }));
+        if (current.isPlaying) {
+          audioRef.current?.pause();
+        } else if (audioRef.current && current.currentTrack?.preview_url) {
+          audioRef.current.play().catch(console.error);
+        } else if (!current.currentTrack?.preview_url) {
+          startSimulation(() => advanceToNextRef.current());
+          setState((prev) => ({ ...prev, isPlaying: true }));
+        }
+        return;
+      }
+
+      if (current.currentTrack && !options?.skipHistory) {
+        playHistoryRef.current = [...playHistoryRef.current, current.currentTrack].slice(-50);
+      }
+
+      setState((prev) => ({
+        ...prev,
+        currentTrack: track,
+        isPlaying: true,
+        progress: 0,
+      }));
+
+      try {
+        let enhancedTrack: ITrack;
+        if (track.preview_url) {
+          enhancedTrack = track;
+        } else {
+          enhancedTrack = await mcpAudioService.enhanceTrackWithPreview(track);
+        }
+
+        setState((prev) => ({
+          ...prev,
+          currentTrack: enhancedTrack,
+        }));
+
+        if (audioRef.current && enhancedTrack.preview_url) {
+          const audio = audioRef.current;
+          audio.src = enhancedTrack.preview_url;
+          audio.volume = stateRef.current.volume / 100;
+
+          try {
+            await audio.play();
+          } catch {
+            startSimulation(() => advanceToNextRef.current());
+          }
+        } else {
+          startSimulation(() => advanceToNextRef.current());
+        }
+      } catch {
+        startSimulation(() => advanceToNextRef.current());
+      }
+    },
+    [clearSimulation, startSimulation]
+  );
+
+  playTrackRef.current = playTrack;
+
+  const addToQueue = useCallback(
+    (track: ITrack, options?: { openPanel?: boolean }) => {
+      const openPanel = options?.openPanel ?? true;
+      const currentId = stateRef.current.currentTrack?.id;
+
+      if (track.id === currentId) return;
+
+      setUpNext((prev) => {
+        if (prev.some((t) => t.id === track.id)) return prev;
+        const next = [...prev, track];
+        upNextRef.current = next;
+        return next;
+      });
+
+      if (openPanel) setIsQueueOpen(true);
+    },
+    []
+  );
+
+  const removeFromQueue = useCallback(
+    (trackId: string) => {
+      setUpNext((prev) => {
+        const next = prev.filter((t) => t.id !== trackId);
+        upNextRef.current = next;
+        return next;
+      });
+    },
+    []
+  );
+
+  const reorderQueue = useCallback((fromIndex: number, toIndex: number) => {
+    setUpNext((prev) => {
+      if (fromIndex < 0 || fromIndex >= prev.length || toIndex < 0 || toIndex >= prev.length) {
+        return prev;
+      }
+      const next = [...prev];
+      const [item] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, item);
+      upNextRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const moveQueueItem = useCallback((index: number, direction: 'up' | 'down') => {
+    setUpNext((prev) => {
+      const target = direction === 'up' ? index - 1 : index + 1;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      upNextRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const clearQueue = useCallback(() => {
+    syncUpNext([]);
+  }, [syncUpNext]);
+
+  const playFromQueue = useCallback(
+    (track: ITrack) => {
+      removeFromQueue(track.id);
+      playTrack(track);
+    },
+    [removeFromQueue, playTrack]
+  );
+
+  const openQueue = useCallback(() => setIsQueueOpen(true), []);
+  const closeQueue = useCallback(() => setIsQueueOpen(false), []);
+  const toggleQueue = useCallback(() => setIsQueueOpen((open) => !open), []);
+
+  const isInQueue = useCallback(
+    (trackId: string) => {
+      if (state.currentTrack?.id === trackId) return true;
+      return upNext.some((t) => t.id === trackId);
+    },
+    [state.currentTrack?.id, upNext]
+  );
+
+  const togglePlay = useCallback(() => {
+    if (!stateRef.current.currentTrack) return;
+
+    const current = stateRef.current;
+
+    if (current.isPlaying) {
+      audioRef.current?.pause();
+      clearSimulation();
+    } else {
+      if (audioRef.current && current.currentTrack?.preview_url) {
+        audioRef.current.play().catch(console.error);
+      } else if (current.currentTrack) {
+        startSimulation(() => advanceToNextRef.current());
+      }
     }
 
-    // If it's the same track, just toggle play/pause
-    if (state.currentTrack?.id === track.id) {
-      setState(prev => ({ ...prev, isPlaying: !prev.isPlaying }));
-      if (state.isPlaying) {
-        audioRef.current?.pause();
-        if (simulationInterval.current) {
-          clearInterval(simulationInterval.current);
-          simulationInterval.current = null;
-        }
-      } else {
-        if (audioRef.current && state.currentTrack.preview_url) {
-          audioRef.current.play().catch(console.error);
-        }
+    setState((prev) => ({ ...prev, isPlaying: !prev.isPlaying }));
+  }, [clearSimulation, startSimulation]);
+
+  const skipNext = useCallback(() => {
+    advanceToNext();
+  }, [advanceToNext]);
+
+  const skipPrevious = useCallback(() => {
+    const current = stateRef.current;
+    if (!current.currentTrack) return;
+
+    if (current.progress > 3) {
+      setState((prev) => ({ ...prev, progress: 0 }));
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
       }
       return;
     }
 
-    // Set new track immediately for responsive UI
-    setState(prev => ({
-      ...prev,
-      currentTrack: track,
-      isPlaying: true,
-      progress: 0,
-    }));
-
-    try {
-      // Check if track already has preview URL
-      if ('preview_url' in track && track.preview_url) {
-        console.log('✅ Track already has preview URL:', track.preview_url.substring(0, 50) + '...');
-        var enhancedTrack = track;
-      } else {
-        // Try to enhance the track with MCP preview URL
-        console.log('🔄 MCP: Enhancing track with preview URL...', track.name);
-        var enhancedTrack = await mcpAudioService.enhanceTrackWithPreview(track);
-
-        console.log('🎯 MCP: Enhancement result:', {
-          trackName: enhancedTrack.name,
-          hasPreviewUrl: !!enhancedTrack.preview_url,
-          previewUrl: enhancedTrack.preview_url ? 'Available' : 'Not available'
-        });
+    const history = playHistoryRef.current;
+    if (history.length > 0) {
+      const previous = history[history.length - 1];
+      playHistoryRef.current = history.slice(0, -1);
+      if (current.currentTrack) {
+        const queue = upNextRef.current;
+        syncUpNext([current.currentTrack, ...queue]);
       }
-
-      // Update the current track with enhanced data
-      setState(prev => ({
-        ...prev,
-        currentTrack: enhancedTrack,
-      }));
-
-      // Load and play audio if preview URL is available
-      if (audioRef.current && enhancedTrack.preview_url) {
-        console.log('🎶 Loading real preview URL:', enhancedTrack.preview_url.substring(0, 50) + '...');
-        console.log('🔧 AUDIO DEBUG: Full preview URL:', enhancedTrack.preview_url);
-
-        // Enhanced audio debugging
-        const audio = audioRef.current;
-        audio.src = enhancedTrack.preview_url;
-        audio.volume = state.volume / 100;
-
-        console.log('🔧 AUDIO DEBUG: Audio element state:', {
-          src: audio.src,
-          volume: audio.volume,
-          muted: audio.muted,
-          readyState: audio.readyState,
-          networkState: audio.networkState,
-          canPlay: audio.readyState >= 3
-        });
-
-        // Add event listeners for detailed debugging
-        const handleLoadedData = () => {
-          console.log('✅ AUDIO DEBUG: Audio data loaded successfully');
-          console.log('🔧 AUDIO DEBUG: Duration:', audio.duration, 'seconds');
-        };
-
-        const handleCanPlay = () => {
-          console.log('✅ AUDIO DEBUG: Audio can play - ready state:', audio.readyState);
-        };
-
-        const handlePlay = () => {
-          console.log('✅ AUDIO DEBUG: Play event fired - audio should be playing now');
-          console.log('🔧 AUDIO DEBUG: Current time:', audio.currentTime, 'Paused:', audio.paused);
-        };
-
-        const handleError = (e: Event) => {
-          console.error('❌ AUDIO DEBUG: Audio error event:', e);
-          if (audio.error) {
-            console.error('❌ AUDIO DEBUG: Audio error details:', {
-              code: audio.error.code,
-              message: audio.error.message
-            });
-          }
-        };
-
-        audio.addEventListener('loadeddata', handleLoadedData);
-        audio.addEventListener('canplay', handleCanPlay);
-        audio.addEventListener('play', handlePlay);
-        audio.addEventListener('error', handleError);
-
-        try {
-          console.log('🎵 AUDIO DEBUG: Attempting to play...');
-          const playPromise = await audio.play();
-          console.log('✅ AUDIO DEBUG: Play promise resolved successfully:', playPromise);
-          console.log('🔧 AUDIO DEBUG: After play() - paused:', audio.paused, 'currentTime:', audio.currentTime);
-        } catch (error) {
-          console.error('❌ AUDIO DEBUG: Play promise rejected:', error);
-          console.error('❌ AUDIO DEBUG: Error details:', {
-            name: (error as Error).name,
-            message: (error as Error).message,
-            audioSrc: audio.src,
-            audioVolume: audio.volume,
-            audioMuted: audio.muted
-          });
-
-          // Fall back to simulation if audio fails
-          startSimulation();
-        } finally {
-          // Clean up event listeners
-          setTimeout(() => {
-            audio.removeEventListener('loadeddata', handleLoadedData);
-            audio.removeEventListener('canplay', handleCanPlay);
-            audio.removeEventListener('play', handlePlay);
-            audio.removeEventListener('error', handleError);
-          }, 5000);
-        }
-      } else {
-        console.log('⚠️ No preview URL available - using simulation');
-        startSimulation();
-      }
-    } catch (error) {
-      console.error('❌ MCP service error, falling back to simulation:', error);
-      startSimulation();
+      playTrack(previous, { skipHistory: true });
     }
-
-    function startSimulation() {
-      // Simulate progress for tracks without preview URLs
-      let simulatedProgress = 0;
-      simulationInterval.current = setInterval(() => {
-        simulatedProgress += 1;
-        setState(prev => ({ ...prev, progress: simulatedProgress }));
-
-        if (simulatedProgress >= 100) {
-          if (simulationInterval.current) {
-            clearInterval(simulationInterval.current);
-            simulationInterval.current = null;
-          }
-          setState(prev => ({ ...prev, isPlaying: false, progress: 0 }));
-        }
-      }, 250); // Optimized to match real audio progress updates
-    }
-  }, [state.currentTrack?.id, state.volume, state.currentTrack?.preview_url, state.isPlaying]); // Added missing dependencies
-
-  const togglePlay = useCallback(() => {
-    if (!state.currentTrack) return;
-
-    if (state.isPlaying) {
-      // Pause real audio
-      audioRef.current?.pause();
-
-      // Clear simulation interval when pausing
-      if (simulationInterval.current) {
-        clearInterval(simulationInterval.current);
-        simulationInterval.current = null;
-      }
-    } else {
-      // Resume real audio if available
-      if (audioRef.current && state.currentTrack.preview_url) {
-        audioRef.current.play().catch(error => {
-          console.error('Audio play failed:', error);
-        });
-      } else {
-        // Restart simulation for tracks without preview URLs
-        console.log('Resuming simulation playback');
-        let simulatedProgress = state.progress;
-        simulationInterval.current = setInterval(() => {
-          simulatedProgress += 1;
-          setState(prev => ({ ...prev, progress: simulatedProgress }));
-
-          if (simulatedProgress >= 100) {
-            if (simulationInterval.current) {
-              clearInterval(simulationInterval.current);
-              simulationInterval.current = null;
-            }
-            setState(prev => ({ ...prev, isPlaying: false, progress: 0 }));
-          }
-        }, 250); // Consistent timing with other progress updates
-      }
-    }
-
-    setState(prev => ({ ...prev, isPlaying: !prev.isPlaying }));
-  }, [state.isPlaying, state.currentTrack, state.progress]);
-
-  const skipNext = useCallback(() => {
-    console.log('Skip next - not implemented yet');
-    // TODO: Implement next track logic
-  }, []);
-
-  const skipPrevious = useCallback(() => {
-    console.log('Skip previous - not implemented yet');
-    // TODO: Implement previous track logic
-  }, []);
+  }, [playTrack, syncUpNext]);
 
   const seek = useCallback((position: number) => {
-    setState(prev => ({ ...prev, progress: position }));
-    
+    setState((prev) => ({ ...prev, progress: position }));
+
     if (audioRef.current && audioRef.current.duration) {
       audioRef.current.currentTime = (position / 100) * audioRef.current.duration;
     }
   }, []);
 
   const setVolume = useCallback((volume: number) => {
-    setState(prev => ({ ...prev, volume }));
-    
+    setState((prev) => ({ ...prev, volume }));
+
     if (audioRef.current) {
       audioRef.current.volume = volume / 100;
     }
   }, []);
 
   const toggleShuffle = useCallback(() => {
-    setState(prev => ({ ...prev, isShuffled: !prev.isShuffled }));
-  }, []);
+    setState((prev) => {
+      const nextShuffled = !prev.isShuffled;
+      if (nextShuffled && upNextRef.current.length > 1) {
+        syncUpNext(shuffleArray(upNextRef.current));
+      }
+      return { ...prev, isShuffled: nextShuffled };
+    });
+  }, [syncUpNext]);
 
   const toggleRepeat = useCallback(() => {
-    setState(prev => {
+    setState((prev) => {
       const modes: Array<'off' | 'one' | 'all'> = ['off', 'one', 'all'];
       const currentIndex = modes.indexOf(prev.repeatMode);
       const nextMode = modes[(currentIndex + 1) % modes.length];
@@ -340,12 +386,11 @@ export const useAudioPlayer = () => {
   }, []);
 
   const toggleFavorite = useCallback(() => {
-    console.log('Toggle favorite - not implemented yet');
-    // TODO: Implement favorite logic
+    // Placeholder for favorites
   }, []);
 
   const toggleMinimize = useCallback(() => {
-    setState(prev => ({ ...prev, isMinimized: !prev.isMinimized }));
+    setState((prev) => ({ ...prev, isMinimized: !prev.isMinimized }));
   }, []);
 
   const closePlayer = useCallback(() => {
@@ -353,7 +398,10 @@ export const useAudioPlayer = () => {
       audioRef.current.pause();
       audioRef.current.src = '';
     }
-    
+    clearSimulation();
+    syncUpNext([]);
+    playHistoryRef.current = [];
+
     setState({
       currentTrack: null,
       isPlaying: false,
@@ -363,10 +411,9 @@ export const useAudioPlayer = () => {
       repeatMode: 'off',
       isMinimized: false,
     });
-  }, []);
+  }, [clearSimulation, syncUpNext]);
 
   return {
-    // State
     currentTrack: state.currentTrack,
     isPlaying: state.isPlaying,
     progress: state.progress,
@@ -374,8 +421,8 @@ export const useAudioPlayer = () => {
     isShuffled: state.isShuffled,
     repeatMode: state.repeatMode,
     isMinimized: state.isMinimized,
-    
-    // Actions
+    upNext,
+    isQueueOpen,
     playTrack,
     togglePlay,
     skipNext,
@@ -387,5 +434,15 @@ export const useAudioPlayer = () => {
     toggleFavorite,
     toggleMinimize,
     closePlayer,
+    addToQueue,
+    removeFromQueue,
+    reorderQueue,
+    moveQueueItem,
+    clearQueue,
+    playFromQueue,
+    openQueue,
+    closeQueue,
+    toggleQueue,
+    isInQueue,
   };
 };

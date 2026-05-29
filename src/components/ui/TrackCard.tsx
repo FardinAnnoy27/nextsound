@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Card, CardContent } from './card';
-import {
-  FaClock
-} from 'react-icons/fa';
+import { Button } from './button';
+import { FaClock } from 'react-icons/fa';
+import { FiPlus, FiCheck } from 'react-icons/fi';
 import { ITrack } from '@/types';
 import { getImageUrl, cn } from '@/utils';
 
@@ -11,6 +11,9 @@ interface TrackCardProps {
   category: string;
   isPlaying?: boolean;
   onPlay?: (track: ITrack) => void;
+  onAddToQueue?: (track: ITrack) => void;
+  isInQueue?: boolean;
+  isCurrentTrack?: boolean;
   variant?: 'compact' | 'detailed' | 'featured';
   className?: string;
 }
@@ -19,7 +22,10 @@ export const TrackCard: React.FC<TrackCardProps> = ({
   track,
   category: _category,
   isPlaying: _isPlayingProp,
-  onPlay: _onPlayProp,
+  onPlay,
+  onAddToQueue,
+  isInQueue = false,
+  isCurrentTrack = false,
   variant = 'detailed',
   className
 }) => {
@@ -86,6 +92,65 @@ export const TrackCard: React.FC<TrackCardProps> = ({
             "absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent transition-opacity duration-300 rounded-lg",
             isHovered ? "opacity-100" : "opacity-0"
           )} />
+
+          {/* Add to queue */}
+          {onAddToQueue && (
+            <div
+              className={cn(
+                "absolute bottom-2 left-2 right-2 z-20 transition-all duration-300",
+                isHovered ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1 pointer-events-none"
+              )}
+            >
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="w-full h-8 text-xs font-semibold bg-white/95 dark:bg-gray-900/95 hover:bg-white dark:hover:bg-gray-900 shadow-md gap-1.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddToQueue(track);
+                }}
+                disabled={isInQueue || isCurrentTrack}
+              >
+                {isCurrentTrack ? (
+                  <>
+                    <FiCheck className="w-3.5 h-3.5 text-green-600" />
+                    Now playing
+                  </>
+                ) : isInQueue ? (
+                  <>
+                    <FiCheck className="w-3.5 h-3.5 text-green-600" />
+                    In queue
+                  </>
+                ) : (
+                  <>
+                    <FiPlus className="w-3.5 h-3.5" />
+                    Add to Queue
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Play on artwork click */}
+          {onPlay && (
+            <button
+              type="button"
+              className={cn(
+                "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 transition-opacity duration-300",
+                isHovered ? "opacity-100" : "opacity-0 pointer-events-none"
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                onPlay(track);
+              }}
+              aria-label={`Play ${displayTitle}`}
+            >
+              <span className="w-12 h-12 rounded-full bg-white/90 dark:bg-gray-900/90 flex items-center justify-center shadow-lg">
+                <span className="w-0 h-0 border-t-[8px] border-t-transparent border-l-[14px] border-l-gray-900 dark:border-l-white border-b-[8px] border-b-transparent ml-1" />
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Track information */}

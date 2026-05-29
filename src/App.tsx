@@ -11,6 +11,7 @@ import {
   DemoModeBadge,
 } from "@/common";
 import { CommandPalette } from "@/components/ui/CommandPalette";
+import { PlayerShell } from "@/components/ui/PlayerShell";
 
 import "react-loading-skeleton/dist/skeleton.css";
 import "swiper/css";
@@ -40,7 +41,7 @@ const App = () => {
       <SideBar />
       <Header onOpenSearch={() => setIsCommandPaletteOpen(true)} />
       <DemoModeBadge />
-      <main className="transition-all duration-300 lg:pb-14 md:pb-4 sm:pb-2 xs:pb-1 pb-0 bg-white dark:bg-deep-dark min-h-screen">
+      <main className="transition-all duration-300 pb-24 bg-white dark:bg-deep-dark min-h-screen">
         <ScrollToTop>
           <ErrorBoundary>
             <Suspense fallback={<Loader />}>
@@ -63,6 +64,7 @@ const App = () => {
       />
 
       <Footer />
+      <PlayerShell />
     </>
   );
 };
