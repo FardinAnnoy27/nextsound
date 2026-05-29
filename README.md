@@ -204,3 +204,5 @@ nextsound/
   <p>Built with ❤️ for music lovers everywhere</p>
   <p>Discover your next favorite track with NextSound</p>
 </div>
+Inspired by / [Code base](https://github.com/nextwork-projects/nextsound.git) from natashaongiscoding,CARWHO
+,itsnextwork)
