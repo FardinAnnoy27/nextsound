@@ -136,36 +136,38 @@ npm run preview
 - **Testing:** Vitest, Playwright
 
 <br>
-Project Structure
+## 🏗️ Project Architecture & Structure
 
+```text
 nextsound/
 ├── server/
-│   └── index.js              # Express proxy: auth, CORS, Spotify forwarding
+│   └── index.js              # Express proxy: Auth, CORS, and Spotify API forwarding
 ├── public/
-│   └── mockServiceWorker.js  # MSW service worker (optional dev mocking)
+│   └── mockServiceWorker.js  # MSW Service Worker (Optional development mocking)
 ├── src/
-│   ├── main.tsx              # App bootstrap & provider tree
-│   ├── App.tsx               # Layout, routes, global shortcuts
-│   ├── pages/
-│   │   ├── Home/             # Hero + music sections
-│   │   └── NotFound/
-│   ├── common/               # Layout: Header, Footer, Sidebar, Section, Loader, etc.
-│   ├── components/ui/        # Player, TrackCard, CommandPalette, shadcn primitives
-│   ├── context/              # Theme, Global UI, AudioPlayer providers
-│   ├── hooks/                # useAudioPlayer, useCommandPalette, useLoading, etc.
-│   ├── services/
-│   │   ├── MusicAPI.ts       # Unified data facade (mock vs live routing)
-│   │   ├── SpotifyAPI.ts     # RTK Query Spotify endpoints + retry/cache
-│   │   └── MCPAudioService.ts# Preview URL fetching for audio player
-│   ├── store/index.ts        # Redux store configuration
-│   ├── data/mockMusicData.ts # Demo mode curated tracks
-│   ├── utils/                # config, helpers, offline cache, search algorithm
-│   ├── constants/            # Nav links, homepage sections
-│   ├── mocks/                # MSW handlers (optional)
-│   └── types.d.ts            # ITrack, Spotify API types
-├── .env.example              # Environment variable template
-├── vite.config.ts            # Vite + @ path alias
-└── package.json
+│   ├── main.tsx              # Application bootstrap & global Context Provider tree
+│   ├── App.tsx               # Master Layout, routing configurations, global shortcuts
+│   ├── pages/                # High-level route views
+│   │   ├── Home/             # Landing view featuring Hero section & music shelves
+│   │   └── NotFound/         # Fallback 404 error page template
+│   ├── common/               # Shared structural layout components (Header, Footer, Sidebar, Loader)
+│   ├── components/ui/        # Reusable interface micro-primitives (Player, TrackCard, CommandPalette)
+│   ├── context/              # Context Providers (Global UI, Application Theme, AudioPlayer states)
+│   ├── hooks/                # Custom React Hooks (useAudioPlayer, useCommandPalette, useLoading)
+│   ├── services/             # Core Core Network APIs & Data Access Layer
+│   │   ├── MusicAPI.ts       # Unified data facade managing Mock vs Live dynamic routing
+│   │   ├── SpotifyAPI.ts     # RTK Query integrations with automatic retry/caching states
+│   │   └── MCPAudioService.ts# Audio streaming endpoint parser & preview URL fetchers
+│   ├── store/index.ts        # Redux Toolkit global state store configuration
+│   ├── data/mockMusicData.ts # Pre-curated music schemas for offline/demo operation modes
+│   ├── utils/                # Configuration flags, general helpers, client-side caching scripts
+│   ├── constants/            # Application static maps (Navigation configurations, section limits)
+│   ├── mocks/                # Mock Service Worker network interception handlers
+│   └── types.d.ts            # Global TypeScript definition files (ITrack schema, Spotify API interfaces)
+├── .env.example              # Environment variables baseline configuration blueprint
+├── vite.config.ts            # Vite compiler adjustments and absolute path (@/) mapping
+└── package.json              # Node.js project manifests, runtime controls, and library matrices
+```
 ## Troubleshooting
 
 ### Common Issues
